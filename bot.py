@@ -382,21 +382,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             False
         )
 
+# =========================
+# SET ALARM
+# =========================
+
 async def set_alarm(update, context, jam, nama, info, is_tugas):
 
     try:
-
-        # ================= FORMAT JAM SIMPLE =================
 
         jam = str(jam).strip()
 
         if ":" not in jam:
             await update.message.reply_text(
-                "❌ Pake format jam kayak gini meow:\n\n15:30"
+                "❌ Format jam harus kayak gini:\n15:30"
             )
             return
 
-        # langsung ambil jam & menit
         h, m = jam.split(":")
 
         h = int(h)
@@ -409,6 +410,64 @@ async def set_alarm(update, context, jam, nama, info, is_tugas):
             minute=m,
             second=0,
             microsecond=0
+        )
+
+        diff = (target - now).total_seconds()
+
+        if diff < 0:
+            diff += 86400
+
+        key = 'tugas' if is_tugas else 'jadwal'
+
+        if key not in context.user_data:
+            context.user_data[key] = []
+
+        entry = {
+            'nama': nama,
+            'jam': jam
+        }
+
+        if is_tugas:
+            entry['tgl'] = info.split(' (')[0]
+            entry['tipe'] = info.split('(')[1].replace(')', '')
+        else:
+            entry['hari'] = info
+
+        context.user_data[key].append(entry)
+
+        context.job_queue.run_repeating(
+            alarm_msg,
+            interval=300,
+            first=diff,
+            chat_id=update.effective_chat.id,
+            name=nama,
+            data={
+                'nama': nama,
+                'count': 0,
+                'max': 15
+            }
+        )
+
+        await update.message.reply_text(
+            f"""
+✅ TUGAS BERHASIL DISIMPAN
+
+📝 {nama}
+⏰ {jam}
+
+🚨 Reminder brutal aktif meow 😼🔥
+""",
+            reply_markup=get_home_keyboard()
+        )
+
+        context.user_data['state'] = None
+
+    except Exception as e:
+
+        print("ERROR:", e)
+
+        await update.message.reply_text(
+            f"❌ ERROR:\n{e}"
         )
 
 

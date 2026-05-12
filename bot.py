@@ -387,11 +387,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # SET ALARM
 # =========================
 
+# =========================
+# SET ALARM
+# =========================
+
 async def set_alarm(update, context, jam, nama, info, is_tugas):
 
     try:
 
-        h, m = map(int, jam.split(':'))
+        # ================= FIX FORMAT JAM =================
+
+        jam = jam.strip()
+
+        if ":" not in jam:
+            raise ValueError("Format jam salah")
+
+        h, m = map(int, jam.split(":"))
+
+        if h < 0 or h > 23 or m < 0 or m > 59:
+            raise ValueError("Jam tidak valid")
 
         now = datetime.now()
 
@@ -426,11 +440,11 @@ async def set_alarm(update, context, jam, nama, info, is_tugas):
         context.user_data[key].append(entry)
 
         # ================= REMINDER SPAM =================
-        # maksimal 15x spam
+        # spam tiap 5 menit maksimal 15x
 
         context.job_queue.run_repeating(
             alarm_msg,
-            interval=300,  # 5 menit
+            interval=300,
             first=diff,
             chat_id=update.effective_chat.id,
             name=nama,
@@ -448,17 +462,26 @@ async def set_alarm(update, context, jam, nama, info, is_tugas):
 📝 {nama}
 ⏰ {jam}
 
-🚨 Reminder, Jangan sampai lupa buat ngerjain tugasnya meow😼🔥
+🚨 Reminder brutal sudah aktif meow 😼🔥
+Aku bakal spam sampe tugasnya kelar 😾
 """,
             reply_markup=get_home_keyboard()
         )
 
         context.user_data['state'] = None
 
-    except:
+    except Exception as e:
+
+        print(e)
 
         await update.message.reply_text(
-            "❌ Format jam salah meow \n\nContoh yang bener:\n15:30"
+            """
+❌ Format jam salah meow 😿
+
+Contoh yang bener:
+⏰ 15:30
+⏰ 07:05
+"""
         )
 
 

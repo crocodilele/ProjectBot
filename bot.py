@@ -14,15 +14,14 @@ from telegram.ext import (
     Defaults
 )
 from telegram.constants import ParseMode
+import random
 
 # ==========================================
 # KONFIGURASI DAN GLOBAL DEFAULTS
 # ==========================================
-# Ganti TOKEN di bawah dengan token asli dari @BotFather
 TOKEN = "8747562941:AAEGyf4mO-6bsEYcBbqfA0Apv96eDwTkc_M"
 JAKARTA_TZ = ZoneInfo("Asia/Jakarta")
 
-# Mengatur Defaults: Pesan otomatis HTML & Waktu otomatis Jakarta 
 defaults = Defaults(parse_mode=ParseMode.HTML, tzinfo=JAKARTA_TZ)
 
 logging.basicConfig(
@@ -30,79 +29,126 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-DAYS =
+DAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 
-# ==========================================
-# UTILITY FUNCTIONS
-# ==========================================
+SPAM_MESSAGES = [
+    "BANGUN MEOW! Tugas {nama} MASIH NUGU! 😾🔥",
+    "Kamu mau F di mata guru? KERJAIN SEKARANG! 😾",
+    "Mager? Deadline ga mager meow! 🐾",
+    "Tugas {nama} nunggu kamu loh meow 😿😭",
+    "MEOW UDAH PERINGATKAN! MASIH BELUM JUGA? 🤬",
+    "NILAI kamu mau amblas gara2 {nama}? KERJA! 📉➡️📈",
+    "WAKTU KAMU HABIS! TUGAS {nama} UDAH MEPET! ⏰💥",
+    "Kamu kira meow bercanda? SPAM MODE ON! 😼⚡",
+    "Tugas {nama} = Masa depan kamu. Kerjain! 🌟",
+    "STOP SCROLLING! KERJAIN TUGAS MEOW! 📱➡️📚"
+]
+
 def get_progress_bar(percent):
-    """Menghasilkan bar visual loading menggunakan Unicode blok [40]"""
+    """Menghasilkan bar visual loading menggunakan Unicode blok"""
     length = 10
     filled = int(length * percent / 100)
     bar = "█" * filled + "░" * (length - filled)
     return f"[{bar}] {percent}%"
 
 def parse_target_datetime(date_str, time_str):
-    """Mengonversi input DD-MM dan HH:MM ke objek datetime aware [24, 52]"""
+    """Mengonversi input DD-MM dan HH:MM ke objek datetime aware"""
     try:
         now = datetime.now(JAKARTA_TZ)
         day, month = map(int, date_str.split('-'))
         hour, minute = map(int, time_str.split(':'))
         
-        # Inisialisasi target untuk tahun ini
         target = now.replace(month=month, day=day, hour=hour, minute=minute, 
                              second=0, microsecond=0)
         
-        # Jika waktu target ternyata sudah lewat dari sekarang, asumsikan untuk tahun depan [25]
         if target < now:
             target = target.replace(year=now.year + 1)
             
         return target
-    except Exception as e:
-        logging.error(f"Error parsing date: {e}")
+    except Exception:
         return None
+
+def get_remaining_time(deadline):
+    """Hitung sisa waktu dengan format keren"""
+    now = datetime.now(JAKARTA_TZ)
+    delta = deadline - now
+    
+    if delta.total_seconds() < 0:
+        return "🚨 <b>TELAT MEOW!</b>"
+    
+    days = delta.days
+    hours, rem = divmod(delta.seconds, 3600)
+    minutes, _ = divmod(rem, 60)
+    
+    if days > 0:
+        return f"⏳ {days}d {hours}j {minutes}m"
+    elif hours > 0:
+        return f"⏰ {hours}j {minutes}m"
+    else:
+        return f"⚡ {minutes}m"
 
 # ==========================================
 # KEYBOARD GENERATORS
 # ==========================================
 def get_home_keyboard():
-    keyboard =,
-       ,
-       
+    keyboard = [
+        [InlineKeyboardButton("➕ Tambah Tugas", callback_data='menu_tambah')],
+        [InlineKeyboardButton("📅 Jadwal Harian", callback_data='menu_jadwal'),
+         InlineKeyboardButton("📊 Daftar Tugas", callback_data='menu_lihat')],
+        [InlineKeyboardButton("🗑️ Hapus Tugas", callback_data='menu_hapus'),
+         InlineKeyboardButton("🔥 Reset Semua", callback_data='menu_reset')]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 def get_days_keyboard():
-    keyboard =
+    keyboard = []
     for i in range(0, len(DAYS), 2):
-        row =, callback_data=f"day_{DAYS[i]}")]
+        row = [InlineKeyboardButton(DAYS[i], callback_data=f"day_{DAYS[i]}")]
         if i + 1 < len(DAYS):
             row.append(InlineKeyboardButton(DAYS[i + 1], callback_data=f"day_{DAYS[i + 1]}"))
         keyboard.append(row)
-    keyboard.append()
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data='back_main')])
     return InlineKeyboardMarkup(keyboard)
 
-# ==========================================
-# COMMAND & CALLBACK HANDLERS
-# ==========================================
+def get_type_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("👤 Mandiri", callback_data='type_mandiri'),
+         InlineKeyboardButton("👥 Kelompok", callback_data='type_kelompok')],
+        [InlineKeyboardButton("🔙 Kembali", callback_data='back_main')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_delete_keyboard(tugas):
+    keyboard = [[InlineKeyboardButton(f"🗑️ {t['nama']}", callback_data=f"del_t_{t['nama']}")] 
+                for t in tugas]
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data='back_main')])
+    return InlineKeyboardMarkup(keyboard)
+
+def get_done_keyboard(tugas):
+    keyboard = [[InlineKeyboardButton(f"✅ {t['nama']}", callback_data=f"done_{t['nama']}")] 
+                for t in tugas]
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data='back_main')])
+    return InlineKeyboardMarkup(keyboard)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler perintah /start - Entry point utama [53]"""
     text = (
-        "<b>╭━━━〔 🤖 CATHELP AI PRO 〕━━━╮</b>\n\n"
-        "Halo meow 😼✨ Aku partner belajar anti-prokrastinasi paling brutal.\n\n"
-        "<b>Apa yang bisa gue lakuin?</b>\n"
-        "• Nyatet tugas & deadline presisi\n"
-        "• Spam reminder brutal kalo lu mager\n"
-        "• Tracking progress sisa waktu lu\n\n"
-        "<i>Gak ngerjain tugas? Siap-siap kena mental meow!</i> 😾"
+        "<b>╭━━━〔 🤖 CATHELP 〕━━━╮</b>\n\n"
+        "Halo meow 😼✨ <b>Partner belajar anti-mager!</b>\n\n"
+        "<b>🔥 Aku bisa:</b>\n"
+        "• Spam reminder pas deadline supaya kamu nggak lupa\n"
+        "• Reminder jadwal harian otomatis\n"
+        "• Nyimpen jadwal harian\n"
+        "• Nyatet tugas\n\n"
+        "<i>Gak ngerjain tugas? Siap-siap kena <b>CAKAR</b>! 😾</i>"
     )
+    keyboard = get_home_keyboard()
     
     if update.message:
-        await update.message.reply_text(text, reply_markup=get_home_keyboard())
+        await update.message.reply_text(text, reply_markup=keyboard)
     else:
-        await update.callback_query.edit_message_text(text, reply_markup=get_home_keyboard())
+        await update.callback_query.edit_message_text(text, reply_markup=keyboard)
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mengelola interaksi tombol inline [45]"""
     query = update.callback_query
     await query.answer()
 
@@ -111,241 +157,281 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['state'] = 'WAIT_TASK_NAME'
 
     elif query.data == 'menu_jadwal':
-        await query.edit_message_text("📅 Pilih hari buat jadwalnyaa~", reply_markup=get_days_keyboard())
+        await query.edit_message_text("📅 Pilih hari buat jadwal rutinnya~", reply_markup=get_days_keyboard())
 
     elif query.data.startswith('day_'):
-        day = query.data.split('_')
+        day = query.data.split('_', 1)[1]
         context.user_data['temp_day'] = day
         await query.edit_message_text(f"📅 Jadwal hari <b>{day}</b>\n\nKetik nama kegiatannya meow 😼")
         context.user_data['state'] = 'WAIT_JADWAL_NAME'
 
     elif query.data == 'menu_lihat':
-        tugas = context.user_data.get('tugas',)
-        jadwal = context.user_data.get('jadwal',)
-        now = datetime.now(JAKARTA_TZ)
-
-        text = "<b>📚 DAFTAR TUGAS AKTIF</b>\n\n"
-        if tugas:
-            for t in tugas:
-                # Kalkulasi sisa waktu secara dinamis
-                deadline = t['deadline_obj']
-                delta = deadline - now
-                if delta.total_seconds() < 0:
-                    status = "🚨 <b>OVERDUE NJIR!</b>"
-                else:
-                    days = delta.days
-                    hours, rem = divmod(delta.seconds, 3600)
-                    minutes, _ = divmod(rem, 60)
-                    status = f"⏳ Sisa {days}h {hours}j {minutes}m"
-                
-                text += (
-                    f"📌 <b>{t['nama']}</b>\n"
-                    f"📅 Deadline: <code>{deadline.strftime('%d %b %Y, %H:%M')}</code>\n"
-                    f"👥 Tipe: {t['tipe']}\n"
-                    f"📊 Status: {status}\n\n"
-                )
-        else:
-            text += "Belum ada tugas, tumben lu rajin anjir 😭\n"
-
-        text += "<b>━━━━━━━━━━━━━━</b>\n"
-        text += "<b>📅 JADWAL HARIAN</b>\n\n"
-        if jadwal:
-            for j in jadwal:
-                text += f"📍 {j['hari']} - {j['nama']} (<code>{j['jam']}</code>)\n"
-        else:
-            text += "Jadwal kosong meow."
-        
-        await query.edit_message_text(text, reply_markup=get_home_keyboard())
+        await show_tasks(query, context)
 
     elif query.data == 'menu_hapus':
-        tugas = context.user_data.get('tugas',)
-        kb =
-        for t in tugas:
-            kb.append(}", callback_data=f"del_t_{t['nama']}")])
-        kb.append()
-        await query.edit_message_text("🗑️ Pilih yang mau di-yeet dari memori meow:", reply_markup=InlineKeyboardMarkup(kb))
+        tugas = context.user_data.get('tugas', [])
+        if not tugas:
+            await query.edit_message_text("📭 Belum ada tugas buat dihapus meow 😿", reply_markup=get_home_keyboard())
+        else:
+            await query.edit_message_text("🗑️ Pilih tugas yang mau di-yeet:", reply_markup=get_delete_keyboard(tugas))
 
-    elif query.data.startswith('del_'):
-        _, tipe, nama = query.data.split('_')
-        context.user_data['tugas'] = [t for t in context.user_data.get('tugas',) if t['nama']!= nama]
-        
-        # Batalkan pekerjaan spam yang sedang berjalan [30]
-        current_jobs = context.job_queue.get_jobs_by_name(nama)
-        for job in current_jobs:
+    elif query.data.startswith('del_t_'):
+        nama = query.data.split('_', 2)[2]
+        context.user_data['tugas'] = [t for t in context.user_data.get('tugas', []) if t['nama'] != nama]
+        for job in context.job_queue.get_jobs_by_name(nama):
             job.schedule_removal()
-            
-        await query.edit_message_text(f"🗑️ <b>{nama}</b> udah gue apus dari otak gue meow! 😼", reply_markup=get_home_keyboard())
+        await query.edit_message_text(f"🗑️ <b>{nama}</b> udah aku <b>BANTAI</b> meow! 😼🔥", reply_markup=get_home_keyboard())
 
     elif query.data == 'menu_reset':
         context.user_data.clear()
         for job in context.job_queue.jobs():
             job.schedule_removal()
-        await query.edit_message_text("💥 <b>SEMUA DATA BERHASIL DIBANTAI!</b> 😼🔥", reply_markup=get_home_keyboard())
+        await query.edit_message_text("💥 <b>SEMUA DATA DIBANTAI TOTAL!</b>\n\nMulai dari nol lagi meow! 😼🔥", reply_markup=get_home_keyboard())
 
     elif query.data.startswith('type_'):
-        tipe = query.data.split('_')
+        tipe = query.data.split('_')[1]
         context.user_data['temp_type'] = tipe
-        await query.edit_message_text("📅 Ketik <b>Tanggal Deadline</b> meow\nFormat: <code>DD-MM</code> (Contoh: 15-05)")
+        await query.edit_message_text("📅 Ketik <b>Tanggal Deadline</b>\nFormat: <code>DD-MM</code>\n\nContoh: <code>25-12</code>")
         context.user_data['state'] = 'WAIT_TASK_DATE'
+
+    elif query.data.startswith('done_'):
+        nama = query.data.split('_', 1)[1]
+        context.user_data['tugas'] = [t for t in context.user_data.get('tugas', []) if t['nama'] != nama]
+        for job in context.job_queue.get_jobs_by_name(nama):
+            job.schedule_removal()
+        await query.edit_message_text(
+            f"🎉 <b>MANTAP BANGET MEOW!</b> 🏆\n\n"
+            f"<b>{nama}</b> <i>SELESAI!</i>\n\n"
+            f"Aku bangga banget sama kamu meow! 💯🐾✨", 
+            reply_markup=get_home_keyboard()
+        )
 
     elif query.data == 'back_main':
         await start(update, context)
 
-    elif query.data.startswith('done_'):
-        nama = query.data.split('_')
-        # Hapus data tugas
-        context.user_data['tugas'] = [t for t in context.user_data.get('tugas',) if t['nama']!= nama]
-        # Matikan spam pengingat [31]
-        current_jobs = context.job_queue.get_jobs_by_name(nama)
-        for job in current_jobs:
-            job.schedule_removal()
+async def show_tasks(query, context):
+    tugas = context.user_data.get('tugas', [])
+    jadwal = context.user_data.get('jadwal', [])
+    now = datetime.now(JAKARTA_TZ)
 
-        await query.edit_message_text(
-            f"🎉 <b>YEEAAAAYY!!</b>\n\nTugas <b>{nama}</b> berhasil kelar.\n"
-            f"Gitu dong bestie, aku bangga sama kamu meow! 💯🐾",
-            reply_markup=get_home_keyboard()
-        )
+    text = "<b>📚 TUGAS AKTIF</b>\n\n"
+    
+    if tugas:
+        for t in tugas:
+            deadline = t['deadline_obj']
+            status = get_remaining_time(deadline)
+            progress = min(100, max(0, int(100 * (deadline - now).total_seconds() / (24*3600))))
+            
+            text += (
+                f"📝 <b>{t['nama']}</b>\n"
+                f"📅 <code>{deadline.strftime('%d/%m/%Y %H:%M')}</code>\n"
+                f"👥 {t['tipe']}\n"
+                f"📊 {get_progress_bar(progress)} {status}\n\n"
+            )
+    else:
+        text += "✅ Belum ada tugas! Kamu rajin banget meow 😎\n"
+
+    text += "━━━━━━━━━━━━━━━━━━━━━\n"
+    text += "<b>📅 JADWAL HARIAN</b>\n\n"
+    
+    if jadwal:
+        today = datetime.now(JAKARTA_TZ).strftime("%A")
+        hari_id = DAYS.index(today) if today in DAYS else 0
+        
+        for j in jadwal:
+            text += f"📍 {j['hari']} - {j['nama']} (<code>{j['jam']}</code>)\n"
+    else:
+        text += "📭 Jadwal masih kosong meow\n"
+    
+    await query.edit_message_text(text, reply_markup=get_home_keyboard())
 
 # ==========================================
-# TEXT INPUT STATE MACHINE
+# STATE MACHINE LOGIC
 # ==========================================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get('state')
-    if not state: return
-    txt = update.message.text
+    if not state:
+        return
+        
+    txt = update.message.text.strip()
 
     if state == 'WAIT_TASK_NAME':
         context.user_data['temp_name'] = txt
-        kb =]
-        await update.message.reply_text("👥 Tugasnya mandiri apa kelompok anjir? 🐾", reply_markup=InlineKeyboardMarkup(kb))
+        await update.message.reply_text(
+            f"📝 Tugas <b>{txt}</b> noted!\n\n"
+            "👥 Tugasnya mandiri apa kelompok?", 
+            reply_markup=get_type_keyboard()
+        )
 
     elif state == 'WAIT_TASK_DATE':
-        if '-' not in txt:
-            await update.message.reply_text("❌ Salah format njir! Pake <code>DD-MM</code> (Contoh: 25-12)")
+        if '-' not in txt or len(txt.split('-')) != 2:
+            await update.message.reply_text("❌ Format salah! Pake <code>DD-MM</code> meow.\nContoh: <code>25-12</code>")
             return
         context.user_data['temp_date'] = txt
-        await update.message.reply_text("⏰ Sekarang ketik <b>Jam Deadline</b> meow\nFormat: <code>HH:MM</code> (Contoh: 15:30)")
+        await update.message.reply_text("⏰ Ketik <b>Jam Deadline</b>\nFormat: <code>HH:MM</code>\nContoh: <code>15:30</code>")
         context.user_data['state'] = 'WAIT_TASK_TIME'
 
     elif state == 'WAIT_TASK_TIME':
-        if ':' not in txt:
-            await update.message.reply_text("❌ Jam-nya yang bener dong! Contoh <code>13:00</code>")
-            return
-            
         deadline_obj = parse_target_datetime(context.user_data['temp_date'], txt)
         if not deadline_obj:
-            await update.message.reply_text("❌ Input lu ngaco meow, coba lagi.")
+            await update.message.reply_text("❌ Input ngaco bro! Coba lagi meow.")
             return
 
         nama = context.user_data['temp_name']
         tipe = context.user_data['temp_type']
         
-        # Simpan tugas baru
         new_task = {
-            'nama': nama,
-            'tipe': tipe,
+            'nama': nama, 
+            'tipe': "👤 Mandiri" if tipe == "mandiri" else "👥 Kelompok", 
             'deadline_obj': deadline_obj
         }
-        if 'tugas' not in context.user_data: context.user_data['tugas'] =
+        
+        if 'tugas' not in context.user_data:
+            context.user_data['tugas'] = []
         context.user_data['tugas'].append(new_task)
 
-        # Daftarkan Alarm Tahap 1: Tepat saat deadline 
+        # JADWAL SPAM BRUTAL: 1 jam sebelum -> setiap 3 menit setelah deadline
+        one_hour_before = deadline_obj - timedelta(hours=1)
         context.job_queue.run_once(
-            trigger_deadline_alarm, 
+            pre_deadline_warning, 
+            when=one_hour_before, 
+            chat_id=update.effective_chat.id, 
+            name=f"warn_{nama}",
+            data={'nama': nama}
+        )
+        
+        # Main deadline trigger
+        context.job_queue.run_once(
+            trigger_deadline, 
             when=deadline_obj, 
             chat_id=update.effective_chat.id, 
-            name=nama, 
+            name=nama,
             data={'nama': nama}
         )
 
         await update.message.reply_text(
-            f"✅ <b>TUGAS BERHASIL DISIMPAN!</b>\n\n"
+            f"✅ <b>TUGAS {nama.upper()} DISIMPAN!</b> 🎯\n\n"
             f"📝 <b>{nama}</b>\n"
-            f"⏰ Deadline: {deadline_obj.strftime('%d %b %Y, %H:%M')}\n\n"
-            f"<i>Mode brutal aktif. Gue spam sampe lu kelar meow!</i> 🔥",
+            f"⏰ <code>{deadline_obj.strftime('%d/%m/%Y %H:%M')}</code>\n"
+            f"👥 {new_task['tipe']}\n\n"
+            f"<i>🚨 SPAM MODE AKTIF!</i>",
             reply_markup=get_home_keyboard()
         )
         context.user_data['state'] = None
 
     elif state == 'WAIT_JADWAL_NAME':
         context.user_data['temp_j_name'] = txt
-        await update.message.reply_text(f"⏰ Jam kegiatannya jam berapa meow? (Contoh <code>07:00</code>)")
+        await update.message.reply_text(f"⏰ Jam kegiatannya? (Contoh: <code>07:00</code>)")
         context.user_data['state'] = 'WAIT_JADWAL_TIME'
 
     elif state == 'WAIT_JADWAL_TIME':
-        new_j = {'hari': context.user_data['temp_day'], 'nama': context.user_data['temp_j_name'], 'jam': txt}
-        if 'jadwal' not in context.user_data: context.user_data['jadwal'] =
-        context.user_data['jadwal'].append(new_j)
-        await update.message.reply_text("✅ Jadwal rutin kesimpen meow!", reply_markup=get_home_keyboard())
+        new_jadwal = {
+            'hari': context.user_data['temp_day'], 
+            'nama': context.user_data['temp_j_name'], 
+            'jam': txt
+        }
+        if 'jadwal' not in context.user_data:
+            context.user_data['jadwal'] = []
+        context.user_data['jadwal'].append(new_jadwal)
+        
+        await update.message.reply_text(
+            f"✅ <b>JADWAL ROUTIN DISIMPAN!</b>\n\n"
+            f"📅 {context.user_data['temp_day']} - {txt}\n"
+            f"📝 {context.user_data['temp_j_name']}",
+            reply_markup=get_home_keyboard()
+        )
         context.user_data['state'] = None
 
-# ==========================================
-# ALARM & SPAM REMINDER ENGINE
-# ==========================================
-async def trigger_deadline_alarm(context: ContextTypes.DEFAULT_TYPE):
-    """Alarm awal saat deadline tercapai - Mengaktifkan mode spam berulang [13]"""
+async def pre_deadline_warning(context: ContextTypes.DEFAULT_TYPE):
+    """Warning 1 jam sebelum deadline"""
     job = context.job
     nama = job.data['nama']
+    kb = [[InlineKeyboardButton("✅ Sudah Selesai", callback_data=f"done_{nama}")]]
     
-    kb =]
     await context.bot.send_message(
         chat_id=job.chat_id,
-        text=f"🚨 <b>WOI WOI WOI!</b>\n\nTugas <b>{nama}</b> waktunya udah abis meow!\nCepetan kerjain atau gue spam sampe gila! 😾🔥",
+        text=f"⚠️ <b>1 JAM LAGI!</b> Tugas <b>{nama}</b> deadline-nya MEOW! Siap-siap! ⏰🔥",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+
+async def trigger_deadline(context: ContextTypes.DEFAULT_TYPE):
+    """Trigger spam hell pas deadline"""
+    job = context.job
+    nama = job.data['nama']
+    kb = [[InlineKeyboardButton("✅ Sudah Selesai", callback_data=f"done_{nama}")]]
+    
+    await context.bot.send_message(
+        chat_id=job.chat_id,
+        text=f"🚨 <b>DEADLINE {nama.upper()} TELAH TIBA!</b>\n\n"
+             f"Kerjain SEKARANG atau aku marah! 😾💥",
         reply_markup=InlineKeyboardMarkup(kb)
     )
     
-    # Inisialisasi Spam Tahap 2: Setiap 5 menit 
+    # SPAM EVERY 3 MINUTES (180 detik)
     context.job_queue.run_repeating(
-        execute_spam_cycle,
-        interval=300, # 5 menit
-        first=300, 
-        chat_id=job.chat_id,
-        name=nama,
+        execute_spam, 
+        interval=180, 
+        first=0, 
+        chat_id=job.chat_id, 
+        name=f"spam_{nama}",
         data={'nama': nama, 'count': 0}
     )
 
-async def execute_spam_cycle(context: ContextTypes.DEFAULT_TYPE):
-    """Siklus spam berkelanjutan dengan pesan acak yang brutal [30]"""
+async def execute_spam(context: ContextTypes.DEFAULT_TYPE):
+    """Execute spam message random"""
     job = context.job
-    job.data['count'] += 1
-    count = job.data['count']
-    nama = job.data['nama']
+    count = job.data['count'] + 1
+    job.data['count'] = count
     
-    # Kumpulan pesan brutal 
-    messages =
-    
-    msg = messages[count % len(messages)]
-    kb =]
+    msg = random.choice(SPAM_MESSAGES).format(nama=job.data['nama'])
+    kb = [[InlineKeyboardButton("✅ Sudah Selesai", callback_data=f"done_{job.data['nama']}")]]
     
     await context.bot.send_message(
         chat_id=job.chat_id,
-        text=f"🚨 <b>SPAM REMINDER BRUTAL</b>\n\n{msg}\n\n📌 <i>Spam counter: {count}</i>",
+        text=f"🚨 <b>SPAM #{count} - {job.data['nama'].upper()}</b>\n\n{msg}",
         reply_markup=InlineKeyboardMarkup(kb)
     )
 
 # ==========================================
-# MAIN APPLICATION SETUP
+# DAILY SCHEDULE REMINDER
+# ==========================================
+async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
+    """Kirim reminder jadwal harian jam 6 pagi"""
+    job = context.job
+    now = datetime.now(JAKARTA_TZ)
+    today = now.strftime("%A")
+    hari = DAYS[now.weekday()]
+    
+    jadwal = job.data.get('jadwal', {}).get(hari, [])
+    if jadwal:
+        text = f"🌅 <b>HARI INI {hari.upper()}</b>\n\n"
+        for j in jadwal:
+            text += f"📅 {j['jam']} - {j['nama']}\n"
+        text += "\nJangan lupa ya meow! 😼❤️"
+        
+        await context.bot.send_message(chat_id=job.chat_id, text=text)
+
+# ==========================================
+# MAIN
 # ==========================================
 def main():
-    """Inisialisasi bot dengan persistensi data [14, 34]"""
-    # Menggunakan PicklePersistence agar data tidak hilang saat restart server
-    persistence = PicklePersistence(filepath="cathelp_storage.pickle")
-    
-    # Membangun aplikasi dengan Defaults & Persistence [5, 10]
-    app = (
-        Application.builder()
-       .token(TOKEN)
-       .persistence(persistence)
-       .defaults(defaults)
-       .build()
+    persistence = PicklePersistence(filepath="cathelp_data.pickle")
+    app = Application.builder().token(TOKEN).persistence(persistence).defaults(defaults).build()
+
+    # Daily reminder jam 6 pagi
+    app.job_queue.run_daily(
+        daily_reminder,
+        time=datetime.time(hour=6, minute=0, tzinfo=JAKARTA_TZ),
+        data={'jadwal': DAYS}
     )
 
-    # Registrasi handler
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🤖 CATHELP AI PRO AKTIF & SIAP MENERKAM TUGAS LU! 😼🔥")
+    print("🤖 CATHELP AKTIF! 🔥")
+    print("📱 Bot siap")
+    
     app.run_polling()
 
 if __name__ == '__main__':

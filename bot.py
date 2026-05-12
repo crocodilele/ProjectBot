@@ -382,30 +382,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             False
         )
 
-
-# =========================
-# SET ALARM
-# =========================
-
-# =========================
-# SET ALARM
-# =========================
-
 async def set_alarm(update, context, jam, nama, info, is_tugas):
 
     try:
 
-        # ================= FIX FORMAT JAM =================
+        # ================= FORMAT JAM SIMPLE =================
 
-        jam = jam.strip()
+        jam = str(jam).strip()
 
         if ":" not in jam:
-            raise ValueError("Format jam salah")
+            await update.message.reply_text(
+                "❌ Pake format jam kayak gini meow:\n\n15:30"
+            )
+            return
 
-        h, m = map(int, jam.split(":"))
+        # langsung ambil jam & menit
+        h, m = jam.split(":")
 
-        if h < 0 or h > 23 or m < 0 or m > 59:
-            raise ValueError("Jam tidak valid")
+        h = int(h)
+        m = int(m)
 
         now = datetime.now()
 
@@ -414,74 +409,6 @@ async def set_alarm(update, context, jam, nama, info, is_tugas):
             minute=m,
             second=0,
             microsecond=0
-        )
-
-        diff = (target - now).total_seconds()
-
-        if diff < 0:
-            diff += 86400
-
-        key = 'tugas' if is_tugas else 'jadwal'
-
-        if key not in context.user_data:
-            context.user_data[key] = []
-
-        entry = {
-            'nama': nama,
-            'jam': jam
-        }
-
-        if is_tugas:
-            entry['tgl'] = info.split(' (')[0]
-            entry['tipe'] = info.split('(')[1].replace(')', '')
-        else:
-            entry['hari'] = info
-
-        context.user_data[key].append(entry)
-
-        # ================= REMINDER SPAM =================
-        # spam tiap 5 menit maksimal 15x
-
-        context.job_queue.run_repeating(
-            alarm_msg,
-            interval=300,
-            first=diff,
-            chat_id=update.effective_chat.id,
-            name=nama,
-            data={
-                'nama': nama,
-                'count': 0,
-                'max': 15
-            }
-        )
-
-        await update.message.reply_text(
-            f"""
-✅ TUGAS BERHASIL DISIMPAN
-
-📝 {nama}
-⏰ {jam}
-
-🚨 Reminder brutal sudah aktif meow 😼🔥
-Aku bakal spam sampe tugasnya kelar 😾
-""",
-            reply_markup=get_home_keyboard()
-        )
-
-        context.user_data['state'] = None
-
-    except Exception as e:
-
-        print(e)
-
-        await update.message.reply_text(
-            """
-❌ Format jam salah meow 😿
-
-Contoh yang bener:
-⏰ 15:30
-⏰ 07:05
-"""
         )
 
 
